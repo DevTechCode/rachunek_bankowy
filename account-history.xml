@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<account-history>
+   <search>
+      <account>58102040270000140220314676</account>
+      <date since="2024-10-29" to="2025-10-29"/>
+      <filtering>Wszystkie</filtering>
+   </search>
+      <operations>
+            <operation>
+            <order-date>2025-10-22</order-date>
+            <exec-date>2025-10-22</exec-date>
+            <type>Przelew z rachunku</type>
+            <description>Rachunek odbiorcy : 91191010482218998779390001 Nazwa odbiorcy :  MATEUSZ WOJTKOWIAK KANCELARIA RADCY PRAWNEGO Numer faktury VAT lub okres płatności zbiorczej :  1/10/2025 Identyfikator odbiorcy : 6211738562 Kwota VAT : 250,00 PLN</description>
+            <amount curr="PLN">-875.00</amount>
+            <ending-balance curr="PLN">+12170.21</ending-balance>
+         </operation>
+         <operation>
+            <order-date>2025-10-22</order-date>
+            <exec-date>2025-10-22</exec-date>
+            <type>Przelew na konto</type>
+            <description>Rachunek nadawcy : 89102040270000180220314698 Nazwa nadawcy :  ZBUDUJ SIĘ SPÓŁKA Z OGRANICZONĄ ODP OWIEDZIALNOŚCIĄ Adres nadawcy :  UL. GRABOWA 67A 62-025 SIEKIERKI WIELKIE Numer faktury VAT lub okres płatności zbiorczej :  1/10/2025 Identyfikator odbiorcy : 6211738562 Kwota VAT : 250,00 PLN</description>
+            <amount curr="PLN">+250.00</amount>
+            <ending-balance curr="PLN">+13045.21</ending-balance>
+         </operation>
+      </operations>
+</account-history>
