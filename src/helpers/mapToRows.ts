@@ -1,10 +1,12 @@
-// src/helpers/mapToRows.ts
 import { Operacja } from "../models/Operacja.ts";
 
+/** Zamiana liczby Excela na datę (Excel serial → JS Date) */
 function excelSerialToDate(n: number): Date {
   const base = new Date(Date.UTC(1899, 11, 30));
   return new Date(base.getTime() + n * 86400000);
 }
+
+/** Normalizuje daty do formatu YYYY-MM-DD */
 function toYmd(value: unknown): string {
   if (value instanceof Date && !isNaN(value.getTime())) {
     return value.toISOString().slice(0, 10);
@@ -17,10 +19,15 @@ function toYmd(value: unknown): string {
   }
   return "";
 }
+
+/** Zwraca liczbę lub pusty string */
 function numOrEmpty(n: unknown): number | "" {
   return typeof n === "number" && Number.isFinite(n) ? n : "";
 }
 
+/**
+ * Konwersja listy Operacja → tablica wierszy do GSS
+ */
 export function operacjeToRows(ops: Operacja[]): (string | number)[][] {
   const HEADER = [
     "data_zlecenia",
@@ -28,13 +35,12 @@ export function operacjeToRows(ops: Operacja[]): (string | number)[][] {
     "typ",
     "rodzaj",
     "kwota",
-    "waluta_kwoty",
     "saldo_koncowe",
-    "waluta_salda",
+    "numer_rachunku",
     "opis_surowy",
   ];
 
-  const rows:(string|number)[][] = [HEADER];
+  const rows: (string | number)[][] = [HEADER];
 
   for (const o of ops) {
     rows.push([
@@ -43,9 +49,8 @@ export function operacjeToRows(ops: Operacja[]): (string | number)[][] {
       o.typ ?? "",
       o.rodzaj ?? "",
       numOrEmpty(o.kwota),
-      o.walutaKwoty ?? "",
       numOrEmpty(o.saldoKoncowe),
-      o.walutaSalda ?? "",
+      o.rachunekKontrahenta ?? "",
       o.opisSurowy ?? "",
     ]);
   }
