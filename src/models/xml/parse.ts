@@ -10,7 +10,15 @@ export type ParsedHistory = {
   operations: Operacja[];
 };
 
-export function parseAccountHistoryXml(xml: string): ParsedHistory {
+/**
+ * Parsuje XML historii rachunku bankowego do obiektów `Operacja`.
+ * @param xml - surowy XML
+ * @param kontaMap - mapa numerów rachunków (opcjonalnie)
+ */
+export function parseAccountHistoryXml(
+  xml: string,
+  kontaMap?: Map<string, string>
+): ParsedHistory {
   const parser = new XMLParser({
     ignoreAttributes: false,
     attributeNamePrefix: "",
@@ -34,7 +42,8 @@ export function parseAccountHistoryXml(xml: string): ParsedHistory {
   const opsNode = json?.["account-history"]?.operations?.operation ?? [];
   const opsArray: any[] = Array.isArray(opsNode) ? opsNode : [opsNode];
 
-  const operations = opsArray.map((op) => Operacja.fromXml(op));
+  // 👇 przekazujemy kontaMap do fromXml()
+  const operations = opsArray.map((op) => Operacja.fromXml(op, kontaMap));
 
   return { search, operations };
 }

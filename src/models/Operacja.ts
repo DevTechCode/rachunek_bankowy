@@ -67,7 +67,8 @@ export class Operacja {
     });
   }
 
-  static fromXml(opJson: any): Operacja {
+  static fromXml(opJson: any, kontaMap  ?: Map<string, string>): Operacja {
+
     const orderDate = stringToDate(opJson["order-date"]);
     const execDate = stringToDate(opJson["exec-date"]);
 
@@ -88,17 +89,25 @@ export class Operacja {
       opisSurowy: opJson.description ?? "",
     });
 
-    inst.parseOpis(); // 👈 analiza opisu
+    inst.parseOpis(kontaMap); // 👈 analiza opisu
 
     return inst;
   }
 
   /** 🔍 Analiza pola opisSurowy */
-  parseOpis() {
-    const dane = extractOpisData(this.opisSurowy);
-    this.rachunekKontrahenta = dane.rachunekKontrahenta ?? "-";
-    this.innePola = dane;
-  }
+
+parseOpis(kontaMap?: Map<string, string>) {
+  const dane = extractOpisData(this.opisSurowy, kontaMap);
+
+  this.rachunekKontrahenta = dane.rachunekKontrahenta ?? "-";
+  this.nazwaKontrahenta = dane.kontrahent ?? dane.nazwaKontrahenta ?? "";
+  this.adresKontrahenta = dane.adresKontrahenta ?? "";
+  this.kwotaVat = dane.kwotaVat ? parseFloat(dane.kwotaVat) : 0;
+  this.fakturaLubOkres = dane.fakturaLubOkres ?? "";
+  this.identyfikatorOdbiorcy = dane.identyfikatorOdbiorcy ?? "";
+  this.innePola = dane;
+}
+
 }
 
 /* -------------------- Helpers -------------------- */

@@ -1,33 +1,43 @@
 import { Operacja } from "../models/Operacja.ts";
 
-/** Zamiana liczby Excela na datę (Excel serial → JS Date) */
 function excelSerialToDate(n: number): Date {
   const base = new Date(Date.UTC(1899, 11, 30));
   return new Date(base.getTime() + n * 86400000);
 }
-
-/** Normalizuje daty do formatu YYYY-MM-DD */
 function toYmd(value: unknown): string {
   if (value instanceof Date && !isNaN(value.getTime())) {
     return value.toISOString().slice(0, 10);
   }
   if (typeof value === "number" && Number.isFinite(value)) {
-    return excelSerialToDate(value).toISOString().slice(0, 10);
+    // jeśli przypadkiem dostaniemy liczbę (Excel serial), przekonwertujmy ją na datę
+    const base = new Date(Date.UTC(1899, 11, 30));
+    const date = new Date(base.getTime() + value * 86400000);
+    return date.toISOString().slice(0, 10);
   }
-  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value)) {
-    return value.slice(0, 10);
+  if (typeof value === "string") {
+    // jeśli już jest w formacie daty, zostawmy
+    if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
+    // inne przypadki — próbujemy z Date.parse
+    const d = new Date(value);
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
   }
   return "";
 }
 
-/** Zwraca liczbę lub pusty string */
 function numOrEmpty(n: unknown): number | "" {
   return typeof n === "number" && Number.isFinite(n) ? n : "";
 }
 
-/**
- * Konwersja listy Operacja → tablica wierszy do GSS
- */
+function toDate(value: unknown): Date | null {
+  if (value instanceof Date && !isNaN(value.getTime())) return value;
+  if (typeof value === "number" && Number.isFinite(value)) return excelSerialToDate(value);
+  if (typeof value === "string") {
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  return null;
+}
+
 export function operacjeToRows(ops: Operacja[]): (string | number)[][] {
   const HEADER = [
     "data_zlecenia",
@@ -36,13 +46,21 @@ export function operacjeToRows(ops: Operacja[]): (string | number)[][] {
     "rodzaj",
     "kwota",
     "saldo_koncowe",
-    "numer_rachunku",
+    "kontrahent",
+    "kwota_vat",
     "opis_surowy",
   ];
 
+    const sorted = [...ops].sort((a, b) => {
+    const da = toDate(a.dataRealizacji);
+    const db = toDate(b.dataRealizacji);
+    if (da && db) return da.getTime() - db.getTime();
+    return 0;
+  });
+
   const rows: (string | number)[][] = [HEADER];
 
-  for (const o of ops) {
+  for (const o of sorted) {
     rows.push([
       toYmd(o.dataZlecenia),
       toYmd(o.dataRealizacji),
@@ -50,7 +68,8 @@ export function operacjeToRows(ops: Operacja[]): (string | number)[][] {
       o.rodzaj ?? "",
       numOrEmpty(o.kwota),
       numOrEmpty(o.saldoKoncowe),
-      o.rachunekKontrahenta ?? "",
+      o.nazwaKontrahenta || o.innePola?.kontrahent || "",
+      numOrEmpty(o.kwotaVat || ""),
       o.opisSurowy ?? "",
     ]);
   }
