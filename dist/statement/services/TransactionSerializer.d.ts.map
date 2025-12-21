@@ -1,0 +1,1 @@
+{"version":3,"file":"TransactionSerializer.d.ts","sourceRoot":"","sources":["../../../src/statement/services/TransactionSerializer.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,WAAW,EAAE,MAAM,0BAA0B,CAAC;AAE5D;;;;;GAKG;AACH,qBAAa,qBAAqB;IAChC;;;;OAIG;IACI,YAAY,CAAC,CAAC,EAAE,WAAW,GAAG,MAAM,CAAC,MAAM,EAAE,OAAO,CAAC;CA2E7D"}
