@@ -1,0 +1,11 @@
+# Sekrety / credentials
+service-account.json
+
+# Artefakty builda i uruchomień
+node_modules/
+dist/
+out/
+
+# Lokalne pliki wejściowe
+Zestawienie*.xml
+Zestawienie*.html

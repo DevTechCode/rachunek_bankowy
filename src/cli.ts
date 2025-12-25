@@ -169,7 +169,7 @@ async function main(): Promise<void> {
         relax_column_count: true
       }) as string[][];
 
-      let values: any[][] = records.map((r) => r.map((c) => (c ?? "").toString()));
+      let values = records.map((r) => r.map((c) => (c ?? "").toString()));
       if (values.length === 0) throw new ParseError("CSV jest pusty", { snippet: inPath });
 
       const gss = new GoogleSheetsService();
@@ -187,15 +187,6 @@ async function main(): Promise<void> {
         serviceAccountPath: saPath,
         csvValues: values
       });
-
-      // Konwersja wszystkich kolumn boolean (is*) na prawdziwe booleany.
-      // To usuwa problem "'false" (wartość traktowana jako tekst) i umożliwia checkboxy.
-      values = coerceBooleanColumn(values, "Split payment", false);
-      values = coerceBooleanColumn(values, "isVat", false);
-      values = coerceBooleanColumn(values, "isPracownik", false);
-      values = coerceBooleanColumn(values, "isZarząd", false);
-      values = coerceBooleanColumn(values, "isZarzad", false);
-      values = coerceBooleanColumn(values, "isFaktura", false);
 
       const mode = String(opts.mode ?? "replace").toLowerCase();
       const includeHeader = Boolean(opts.includeHeader);
@@ -215,7 +206,6 @@ async function main(): Promise<void> {
           values,
           serviceAccountPath: saPath
         });
-        await applyCheckboxesIfPresent({ gss, spreadsheetId, sheetTitle, serviceAccountPath: saPath, values });
         console.log(`OK. Appended ${values.length} row(s) to ${spreadsheetId} / ${sheetTitle}`);
       } else {
         await gss.replaceSheetValues({
@@ -224,7 +214,6 @@ async function main(): Promise<void> {
           values,
           serviceAccountPath: saPath
         });
-        await applyCheckboxesIfPresent({ gss, spreadsheetId, sheetTitle, serviceAccountPath: saPath, values });
         // w replace zwykle pierwszy wiersz to header
         console.log(`OK. Replaced with ${Math.max(values.length - 1, 0)} row(s) to ${spreadsheetId} / ${sheetTitle}`);
       }
@@ -287,8 +276,8 @@ async function applyRachunkiMapa(params: {
   gss: GoogleSheetsService;
   spreadsheetId: string;
   serviceAccountPath: string;
-  csvValues: any[][];
-}): Promise<any[][]> {
+  csvValues: string[][];
+}): Promise<string[][]> {
   const { gss, spreadsheetId, serviceAccountPath } = params;
   const values = params.csvValues.map((r) => [...r]);
   if (values.length === 0) return values;
@@ -337,7 +326,7 @@ async function applyRachunkiMapa(params: {
 /**
  * Znajduje indeks kolumny po nazwie nagłówka (dopasowanie "po trimie").
  */
-function findHeaderIndex(header: any[], name: string): number | undefined {
+function findHeaderIndex(header: string[], name: string): number | undefined {
   const n = name.trim();
   const idx = header.findIndex((h) => (h ?? "").toString().trim() === n);
   return idx >= 0 ? idx : undefined;
@@ -349,63 +338,6 @@ function findHeaderIndex(header: any[], name: string): number | undefined {
 function isTruthy(v: unknown): boolean {
   const s = (v ?? "").toString().trim().toLowerCase();
   return s === "true" || s === "1" || s === "tak" || s === "t" || s === "x" || s === "yes";
-}
-
-/**
- * Zamienia wskazaną kolumnę (po nazwie nagłówka) na typ boolean.
- *
- * @param values - tabela CSV (pierwszy wiersz to header)
- * @param headerName - nazwa kolumny
- * @param defaultValue - wartość gdy komórka jest pusta
- */
-function coerceBooleanColumn(values: any[][], headerName: string, defaultValue: boolean): any[][] {
-  if (!values.length) return values;
-  const header = values[0] ?? [];
-  const idx = findHeaderIndex(header, headerName);
-  if (idx == null) return values;
-
-  for (let i = 1; i < values.length; i++) {
-    const row = values[i];
-    const raw = (row?.[idx] ?? "").toString().trim().toLowerCase();
-    if (!raw) {
-      row[idx] = defaultValue;
-    } else if (raw === "true" || raw === "1" || raw === "tak" || raw === "x" || raw === "yes") {
-      row[idx] = true;
-    } else if (raw === "false" || raw === "0" || raw === "nie" || raw === "no") {
-      row[idx] = false;
-    } else {
-      row[idx] = defaultValue;
-    }
-  }
-  return values;
-}
-
-/**
- * Jeśli tabela zawiera kolumnę isFaktura, ustawiamy w Google Sheets walidację checkboxów.
- *
- * @param params - parametry
- */
-async function applyCheckboxesIfPresent(params: {
-  gss: GoogleSheetsService;
-  spreadsheetId: string;
-  sheetTitle: string;
-  serviceAccountPath: string;
-  values: any[][];
-}): Promise<void> {
-  if (!params.values.length) return;
-  const header = params.values[0] ?? [];
-  const checkboxCols = ["Split payment", "isVat", "isPracownik", "isZarząd", "isZarzad", "isFaktura"];
-  for (const name of checkboxCols) {
-    const idx = findHeaderIndex(header, name);
-    if (idx == null) continue;
-    await params.gss.setCheckboxColumnWithAuth({
-      spreadsheetId: params.spreadsheetId,
-      sheetTitle: params.sheetTitle,
-      columnIndex0: idx,
-      startRowIndex0: 1,
-      serviceAccountPath: params.serviceAccountPath
-    });
-  }
 }
 
 /**
