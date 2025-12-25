@@ -11,6 +11,21 @@ import { TransactionSerializer } from "./TransactionSerializer.js";
 export class ExportService {
     serializer = new TransactionSerializer();
     /**
+     * Wyciąga rachunek odbiorcy z opisu.
+     *
+     * W danych PKO najczęściej występuje w polu:
+     * "Rachunek odbiorcy : 02102010260000190207153234"
+     *
+     * Wykorzystujemy już sparsowane `ParsedDescription` (normalizuje klucze i whitespace),
+     * więc tu logika jest prosta i odporna na formatowanie.
+     *
+     * @param t - transakcja
+     */
+    rachunekOdbiorcy(t) {
+        const v = t.description.getFirst("Rachunek odbiorcy");
+        return v && v.trim() ? v.trim() : "-";
+    }
+    /**
      * Zwraca "miesiąc wystawienia faktury".
      *
      * Zgodnie z Twoim wymaganiem: **zawsze defaultowo "-"**.
@@ -69,6 +84,7 @@ export class ExportService {
             "Kwota",
             "Saldo po",
             "Kontrahent",
+            "Rachunek odbiorcy",
             "Split payment",
             "Kwota VAT",
             "Formularz",
@@ -76,9 +92,12 @@ export class ExportService {
             "Numer faktury",
             "Miesiąc wystawienia faktury",
             "isVat",
-            "Inwestycja",
+            "isPracownik",
+            "isZarząd",
             "isFaktura",
             "Link",
+            "Przeznaczenie",
+            "Inwestycja",
             "Uwagi",
             "Opis"
         ];
@@ -95,6 +114,7 @@ export class ExportService {
                 this.csv(t.amount.toNumber().toFixed(t.amount.minorUnits)),
                 this.csv(t.endingBalance.toNumber().toFixed(t.endingBalance.minorUnits)),
                 this.csv(t.counterparty?.name ?? ""),
+                this.csv(this.rachunekOdbiorcy(t)),
                 this.csv(String(t.splitPayment)),
                 this.csv(vatAmount ? vatAmount.toNumber().toFixed(vatAmount.minorUnits) : ""),
                 this.csv(t.vatInfo?.taxForm ?? ""),
@@ -102,8 +122,10 @@ export class ExportService {
                 this.csv(t.vatInfo?.invoiceNumber ?? ""),
                 this.csv(this.invoiceMonth()),
                 this.csv(String(hasVat)),
+                this.csv("false"),
                 this.csv(""),
                 this.csv("false"),
+                this.csv(""),
                 this.csv(""),
                 this.csv(""),
                 this.csv(t.description.raw)

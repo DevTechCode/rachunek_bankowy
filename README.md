@@ -1,5 +1,78 @@
 # `rachunek` — parser zestawień bankowych (XML + HTML fallback) + CLI
 
+## Szybkie komendy (wszystko co możesz uruchomić w tym folderze)
+
+Poniżej jest komplet “entrypointów” w `rachunek/` — najczęściej będziesz używać CLI z `dist/cli.js`.
+
+### Komendy npm (development/build/test)
+
+- **Instalacja zależności**:
+
+```bash
+npm install
+```
+
+- **Testy jednostkowe** (parser opisu + VAT/split):
+
+```bash
+npm test
+```
+
+- **Build do `dist/`**:
+
+```bash
+npm run build
+```
+
+- **Lint**:
+
+```bash
+npm run lint
+```
+
+- **Dev (uruchamia CLI z TS bez kompilacji)**:
+
+```bash
+npm run dev -- <argumenty CLI>
+```
+
+- **Start (uruchamia skompilowane CLI)**:
+
+```bash
+npm start -- <argumenty CLI>
+```
+
+### Komendy CLI (Node)
+
+Wszystkie komendy poniżej uruchamiasz tak:
+
+```bash
+node dist/cli.js <command> [options]
+```
+
+- **`parse`**: parsuje XML/HTML do modelu domenowego i eksportuje do **CSV lub JSON**.
+  - **Wejście**: `--in <plik.xml|plik.html>`
+  - **Wyjście**: `--out <out.csv|out.json>`
+  - **Opcje**: `--best-effort` (parsuj mimo błędów), `--dedup` (usuń duplikaty)
+
+- **`report`**: generuje raporty do JSON.
+  - `--type monthly|vat|top` (opcjonalnie `--top <n>` dla top)
+
+- **`recurring`**: wykrywa stałych odbiorców (recurring payees) i zapisuje do JSON.
+  - `--min-count <n>`
+
+- **`gss:replace`**: upload CSV do Google Sheets (ten sam plik CSV, który generuje `parse`).
+  - `--spreadsheet <id>` (ID skoroszytu), `--sheet <nazwa>` (np. `Historia`)
+  - **Tryb**: `--mode append|replace`
+    - domyślnie: **append**
+  - **Nagłówek**:
+    - domyślnie append pomija header (pierwszy wiersz CSV)
+    - `--include-header` dopisuje header także w append
+
+- **`gss:rachunki`**: buduje i wgrywa (replace) tabelę **`Rachunki`** w tym samym skoroszycie.
+  - Tworzy tabelę: **Rachunek odbiorcy**, **Kontrahent**, **isPracownik**, **isZarzad**, **Mapowanie**
+  - Dane są deduplikowane i sortowane
+
 Ten katalog zawiera **produkcyjny parser** zestawień operacji bankowych (docelowo XML) z **fallbackiem dla HTML tabelarycznego**, który mapuje dane do wspólnego modelu domenowego (`Transaction`, `Money`, `Counterparty`, `VatInfo`, itd.), a potem pozwala:
 
 - eksportować transakcje do **JSON** i **CSV**

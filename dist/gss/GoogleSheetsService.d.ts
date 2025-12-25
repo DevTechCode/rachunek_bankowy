@@ -10,6 +10,16 @@
  */
 export declare class GoogleSheetsService {
     /**
+     * Pobiera wartości z arkusza (range A1 notation).
+     *
+     * @param params - parametry odczytu
+     */
+    getSheetValues(params: {
+        spreadsheetId: string;
+        range: string;
+        serviceAccountPath: string;
+    }): Promise<string[][]>;
+    /**
      * Wgrywa dane do arkusza:
      * - tworzy arkusz jeśli nie istnieje,
      * - czyści zakres,
@@ -20,7 +30,7 @@ export declare class GoogleSheetsService {
     replaceSheetValues(params: {
         spreadsheetId: string;
         sheetTitle: string;
-        values: string[][];
+        values: any[][];
         serviceAccountPath: string;
     }): Promise<void>;
     /**
@@ -36,7 +46,17 @@ export declare class GoogleSheetsService {
     appendSheetValues(params: {
         spreadsheetId: string;
         sheetTitle: string;
-        values: string[][];
+        values: any[][];
+        serviceAccountPath: string;
+    }): Promise<void>;
+    /**
+     * Wersja z jawnie podaną ścieżką service account (używana przez CLI).
+     */
+    setCheckboxColumnWithAuth(params: {
+        spreadsheetId: string;
+        sheetTitle: string;
+        columnIndex0: number;
+        startRowIndex0?: number;
         serviceAccountPath: string;
     }): Promise<void>;
     /**

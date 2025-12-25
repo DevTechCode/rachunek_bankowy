@@ -9,6 +9,18 @@ import type { Transaction } from "../domain/Transaction.js";
 export declare class ExportService {
     private readonly serializer;
     /**
+     * Wyciąga rachunek odbiorcy z opisu.
+     *
+     * W danych PKO najczęściej występuje w polu:
+     * "Rachunek odbiorcy : 02102010260000190207153234"
+     *
+     * Wykorzystujemy już sparsowane `ParsedDescription` (normalizuje klucze i whitespace),
+     * więc tu logika jest prosta i odporna na formatowanie.
+     *
+     * @param t - transakcja
+     */
+    private rachunekOdbiorcy;
+    /**
      * Zwraca "miesiąc wystawienia faktury".
      *
      * Zgodnie z Twoim wymaganiem: **zawsze defaultowo "-"**.

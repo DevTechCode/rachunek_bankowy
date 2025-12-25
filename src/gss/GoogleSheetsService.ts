@@ -13,6 +13,28 @@ import { google } from "googleapis";
  */
 export class GoogleSheetsService {
   /**
+   * Pobiera wartości z arkusza (range A1 notation).
+   *
+   * @param params - parametry odczytu
+   */
+  public async getSheetValues(params: {
+    spreadsheetId: string;
+    range: string;
+    serviceAccountPath: string;
+  }): Promise<string[][]> {
+    const auth = await this.createAuth(params.serviceAccountPath);
+    const sheets = google.sheets({ version: "v4", auth });
+
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: params.spreadsheetId,
+      range: params.range
+    });
+
+    const values = (res.data.values ?? []) as any[];
+    return values.map((r) => (Array.isArray(r) ? r.map((c) => (c ?? "").toString()) : []));
+  }
+
+  /**
    * Wgrywa dane do arkusza:
    * - tworzy arkusz jeśli nie istnieje,
    * - czyści zakres,
@@ -23,7 +45,7 @@ export class GoogleSheetsService {
   public async replaceSheetValues(params: {
     spreadsheetId: string;
     sheetTitle: string;
-    values: string[][];
+    values: any[][];
     serviceAccountPath: string;
   }): Promise<void> {
     const auth = await this.createAuth(params.serviceAccountPath);
@@ -59,7 +81,7 @@ export class GoogleSheetsService {
   public async appendSheetValues(params: {
     spreadsheetId: string;
     sheetTitle: string;
-    values: string[][];
+    values: any[][];
     serviceAccountPath: string;
   }): Promise<void> {
     const auth = await this.createAuth(params.serviceAccountPath);
@@ -73,6 +95,54 @@ export class GoogleSheetsService {
       valueInputOption: "RAW",
       insertDataOption: "INSERT_ROWS",
       requestBody: { values: params.values }
+    });
+  }
+
+  /**
+   * Wersja z jawnie podaną ścieżką service account (używana przez CLI).
+   */
+  public async setCheckboxColumnWithAuth(params: {
+    spreadsheetId: string;
+    sheetTitle: string;
+    columnIndex0: number;
+    startRowIndex0?: number;
+    serviceAccountPath: string;
+  }): Promise<void> {
+    const auth = await this.createAuth(params.serviceAccountPath);
+    const sheets = google.sheets({ version: "v4", auth });
+
+    const meta = await sheets.spreadsheets.get({ spreadsheetId: params.spreadsheetId, includeGridData: false });
+    const sheet = (meta.data.sheets ?? []).find((s) => s.properties?.title === params.sheetTitle);
+    const sheetId = sheet?.properties?.sheetId;
+    if (sheetId === undefined || sheetId === null) return;
+
+    const startRow = params.startRowIndex0 ?? 1; // pomijamy header
+    const col = params.columnIndex0;
+
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: params.spreadsheetId,
+      requestBody: {
+        requests: [
+          {
+            repeatCell: {
+              range: {
+                sheetId,
+                startRowIndex: startRow,
+                startColumnIndex: col,
+                endColumnIndex: col + 1
+              },
+              cell: {
+                dataValidation: {
+                  condition: { type: "BOOLEAN" },
+                  strict: true,
+                  showCustomUi: true
+                }
+              },
+              fields: "dataValidation"
+            }
+          }
+        ]
+      }
     });
   }
 

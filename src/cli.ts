@@ -9,6 +9,8 @@ import { ReportService } from "./statement/services/ReportService.js";
 import { RecurringPayeeDetector } from "./statement/services/RecurringPayeeDetector.js";
 import { ParseError } from "./statement/errors/ParseError.js";
 import { GoogleSheetsService } from "./gss/GoogleSheetsService.js";
+import { RachunkiTableBuilder } from "./gss/RachunkiTableBuilder.js";
+import { TransactionSorter } from "./statement/services/TransactionSorter.js";
 
 /**
  * CLI narzędzie do parsowania i raportowania zestawień bankowych.
@@ -32,6 +34,11 @@ async function main(): Promise<void> {
     .option("--format <format>", "json|csv (domyślnie po rozszerzeniu out)", "")
     .option("--best-effort", "Nie przerywaj na błędach, zbierz je do listy", false)
     .option("--dedup", "Usuń duplikaty po dedupHash", false)
+    .option(
+      "--sort-balance-chain",
+      "Sortuj transakcje w obrębie dnia tak, aby saldo po układało się logicznie (łańcuch sald)",
+      true
+    )
     .action(async (opts) => {
       const inputPath = path.resolve(opts.in);
       const outPath = path.resolve(opts.out);
@@ -40,7 +47,17 @@ async function main(): Promise<void> {
       const parser = new AutoStatementParser();
       const res = await parser.parse(raw, { bestEffort: Boolean(opts.bestEffort) });
 
-      const transactions = opts.dedup ? dedupByHash(res.transactions) : res.transactions;
+      let transactions = opts.dedup ? dedupByHash(res.transactions) : res.transactions;
+      // Zawsze sortujemy rosnąco po dacie operacji (najwcześniejsze -> najpóźniejsze),
+      // aby wyjście było stabilne nawet bez balance-chain.
+      transactions = sortByDatesAscending(transactions);
+
+      // Opcjonalnie (domyślnie true) układamy kolejność w obrębie dnia tak,
+      // żeby saldo po "miało sens" (łańcuch sald).
+      if (Boolean(opts.sortBalanceChain)) {
+        const sorter = new TransactionSorter();
+        transactions = sorter.sortByBalanceChain(transactions);
+      }
       const exportService = new ExportService();
 
       const format = (opts.format || guessFormat(outPath)).toLowerCase();
@@ -131,8 +148,9 @@ async function main(): Promise<void> {
     .requiredOption("--in <file>", "Plik wejściowy CSV (np. ./out/parsed.csv)")
     .requiredOption("--spreadsheet <id>", "ID skoroszytu Google Sheets")
     .requiredOption("--sheet <name>", "Nazwa arkusza (np. Historia)")
-    .option("--mode <mode>", "replace|append (domyślnie replace)", "replace")
+    .option("--mode <mode>", "replace|append (domyślnie append)", "append")
     .option("--skip-header", "Dla append: pomiń pierwszy wiersz CSV (nagłówek)", true)
+    .option("--include-header", "Dla append: dopisz także nagłówek (ustawia skip-header=false)", false)
     .option(
       "--service-account <file>",
       "Ścieżka do service-account.json",
@@ -151,12 +169,37 @@ async function main(): Promise<void> {
         relax_column_count: true
       }) as string[][];
 
-      let values = records.map((r) => r.map((c) => (c ?? "").toString()));
+      let values: any[][] = records.map((r) => r.map((c) => (c ?? "").toString()));
       if (values.length === 0) throw new ParseError("CSV jest pusty", { snippet: inPath });
 
       const gss = new GoogleSheetsService();
+      // Automatyczne mapowanie flag isPracownik / isZarząd na podstawie arkusza Rachunki_Mapa.
+      // Wymaganie:
+      // - w skoroszycie istnieje arkusz "Rachunki_Mapa", zakres A1:G
+      // - kol1 (A): Rachunek odbiorcy
+      // - kol3 (C): wartość dla isPracownik (truthy -> ustaw true)
+      // - kol5 (E): wartość dla isZarzad (truthy -> ustaw true)
+      //
+      // Jeśli arkusza/range nie ma, działamy dalej bez mapowania (best-effort).
+      values = await applyRachunkiMapa({
+        gss,
+        spreadsheetId,
+        serviceAccountPath: saPath,
+        csvValues: values
+      });
+
+      // Konwersja wszystkich kolumn boolean (is*) na prawdziwe booleany.
+      // To usuwa problem "'false" (wartość traktowana jako tekst) i umożliwia checkboxy.
+      values = coerceBooleanColumn(values, "Split payment", false);
+      values = coerceBooleanColumn(values, "isVat", false);
+      values = coerceBooleanColumn(values, "isPracownik", false);
+      values = coerceBooleanColumn(values, "isZarząd", false);
+      values = coerceBooleanColumn(values, "isZarzad", false);
+      values = coerceBooleanColumn(values, "isFaktura", false);
+
       const mode = String(opts.mode ?? "replace").toLowerCase();
-      const skipHeader = Boolean(opts.skipHeader);
+      const includeHeader = Boolean(opts.includeHeader);
+      const skipHeader = includeHeader ? false : Boolean(opts.skipHeader);
 
       if (mode === "append" && skipHeader && values.length > 0) {
         values = values.slice(1);
@@ -172,6 +215,7 @@ async function main(): Promise<void> {
           values,
           serviceAccountPath: saPath
         });
+        await applyCheckboxesIfPresent({ gss, spreadsheetId, sheetTitle, serviceAccountPath: saPath, values });
         console.log(`OK. Appended ${values.length} row(s) to ${spreadsheetId} / ${sheetTitle}`);
       } else {
         await gss.replaceSheetValues({
@@ -180,12 +224,188 @@ async function main(): Promise<void> {
           values,
           serviceAccountPath: saPath
         });
+        await applyCheckboxesIfPresent({ gss, spreadsheetId, sheetTitle, serviceAccountPath: saPath, values });
         // w replace zwykle pierwszy wiersz to header
         console.log(`OK. Replaced with ${Math.max(values.length - 1, 0)} row(s) to ${spreadsheetId} / ${sheetTitle}`);
       }
     });
 
+  program
+    .command("gss:rachunki")
+    .description(
+      "Buduje tabelę 'Rachunki' (Rachunek odbiorcy + Kontrahent + flagi) i wgrywa ją do Google Sheets (replace)"
+    )
+    .requiredOption("--in <file>", "Plik wejściowy XML/HTML (zestawienie operacji)")
+    .requiredOption("--spreadsheet <id>", "ID skoroszytu Google Sheets")
+    .option("--sheet <name>", "Nazwa arkusza (domyślnie Rachunki)", "Rachunki")
+    .option("--best-effort", "Nie przerywaj na błędach, zbierz je do listy", false)
+    .option(
+      "--service-account <file>",
+      "Ścieżka do service-account.json",
+      path.resolve("./service-account.json")
+    )
+    .action(async (opts) => {
+      const inputPath = path.resolve(opts.in);
+      const spreadsheetId = String(opts.spreadsheet);
+      const sheetTitle = String(opts.sheet);
+      const saPath = path.resolve(opts.serviceAccount);
+
+      const raw = await fs.readFile(inputPath, "utf8");
+      const parser = new AutoStatementParser();
+      const res = await parser.parse(raw, { bestEffort: Boolean(opts.bestEffort) });
+
+      const builder = new RachunkiTableBuilder();
+      const values = builder.build(res.transactions);
+
+      const gss = new GoogleSheetsService();
+      await gss.replaceSheetValues({
+        spreadsheetId,
+        sheetTitle,
+        values,
+        serviceAccountPath: saPath
+      });
+
+      console.log(`OK. Rachunki rows: ${Math.max(values.length - 1, 0)}. Out: ${spreadsheetId} / ${sheetTitle}`);
+    });
+
   await program.parseAsync(process.argv);
+}
+
+/**
+ * Mapuje flagi isPracownik / isZarząd w danych CSV na podstawie arkusza "Rachunki_Mapa".
+ *
+ * Mechanika:
+ * - pobieramy `Rachunki_Mapa!A1:G` (w tym samym spreadsheetId),
+ * - tworzymy mapę po rachunku (kol A),
+ * - dla każdej linii CSV, jeśli `Rachunek odbiorcy` pasuje:
+ *   - ustawiamy `isPracownik` na "true" gdy kol C jest truthy
+ *   - ustawiamy `isZarząd` na "true" gdy kol E jest truthy
+ *
+ * @param params - parametry
+ */
+async function applyRachunkiMapa(params: {
+  gss: GoogleSheetsService;
+  spreadsheetId: string;
+  serviceAccountPath: string;
+  csvValues: any[][];
+}): Promise<any[][]> {
+  const { gss, spreadsheetId, serviceAccountPath } = params;
+  const values = params.csvValues.map((r) => [...r]);
+  if (values.length === 0) return values;
+
+  const header = values[0];
+  const idxRachunek = findHeaderIndex(header, "Rachunek odbiorcy");
+  const idxPracownik = findHeaderIndex(header, "isPracownik");
+  const idxZarzad = findHeaderIndex(header, "isZarząd") ?? findHeaderIndex(header, "isZarzad");
+  if (idxRachunek == null || idxPracownik == null || idxZarzad == null) return values;
+
+  let mapa: string[][];
+  try {
+    mapa = await gss.getSheetValues({
+      spreadsheetId,
+      range: "Rachunki_Mapa!A1:G",
+      serviceAccountPath
+    });
+  } catch {
+    // brak uprawnień / brak arkusza / brak range -> ignorujemy
+    return values;
+  }
+  if (mapa.length <= 1) return values;
+
+  const byAcc = new Map<string, { pracownik: boolean; zarzad: boolean }>();
+  for (const row of mapa.slice(1)) {
+    const acc = (row[0] ?? "").toString().trim();
+    if (!acc) continue;
+    const prac = isTruthy(row[2]);
+    const zarz = isTruthy(row[4]);
+    byAcc.set(acc, { pracownik: prac, zarzad: zarz });
+  }
+
+  for (let i = 1; i < values.length; i++) {
+    const row = values[i];
+    const acc = (row[idxRachunek] ?? "").toString().trim();
+    if (!acc) continue;
+    const m = byAcc.get(acc);
+    if (!m) continue;
+    if (m.pracownik) row[idxPracownik] = "true";
+    if (m.zarzad) row[idxZarzad] = "true";
+  }
+
+  return values;
+}
+
+/**
+ * Znajduje indeks kolumny po nazwie nagłówka (dopasowanie "po trimie").
+ */
+function findHeaderIndex(header: any[], name: string): number | undefined {
+  const n = name.trim();
+  const idx = header.findIndex((h) => (h ?? "").toString().trim() === n);
+  return idx >= 0 ? idx : undefined;
+}
+
+/**
+ * Parser wartości truthy z arkusza (np. "TRUE", "true", "1", "tak", "x").
+ */
+function isTruthy(v: unknown): boolean {
+  const s = (v ?? "").toString().trim().toLowerCase();
+  return s === "true" || s === "1" || s === "tak" || s === "t" || s === "x" || s === "yes";
+}
+
+/**
+ * Zamienia wskazaną kolumnę (po nazwie nagłówka) na typ boolean.
+ *
+ * @param values - tabela CSV (pierwszy wiersz to header)
+ * @param headerName - nazwa kolumny
+ * @param defaultValue - wartość gdy komórka jest pusta
+ */
+function coerceBooleanColumn(values: any[][], headerName: string, defaultValue: boolean): any[][] {
+  if (!values.length) return values;
+  const header = values[0] ?? [];
+  const idx = findHeaderIndex(header, headerName);
+  if (idx == null) return values;
+
+  for (let i = 1; i < values.length; i++) {
+    const row = values[i];
+    const raw = (row?.[idx] ?? "").toString().trim().toLowerCase();
+    if (!raw) {
+      row[idx] = defaultValue;
+    } else if (raw === "true" || raw === "1" || raw === "tak" || raw === "x" || raw === "yes") {
+      row[idx] = true;
+    } else if (raw === "false" || raw === "0" || raw === "nie" || raw === "no") {
+      row[idx] = false;
+    } else {
+      row[idx] = defaultValue;
+    }
+  }
+  return values;
+}
+
+/**
+ * Jeśli tabela zawiera kolumnę isFaktura, ustawiamy w Google Sheets walidację checkboxów.
+ *
+ * @param params - parametry
+ */
+async function applyCheckboxesIfPresent(params: {
+  gss: GoogleSheetsService;
+  spreadsheetId: string;
+  sheetTitle: string;
+  serviceAccountPath: string;
+  values: any[][];
+}): Promise<void> {
+  if (!params.values.length) return;
+  const header = params.values[0] ?? [];
+  const checkboxCols = ["Split payment", "isVat", "isPracownik", "isZarząd", "isZarzad", "isFaktura"];
+  for (const name of checkboxCols) {
+    const idx = findHeaderIndex(header, name);
+    if (idx == null) continue;
+    await params.gss.setCheckboxColumnWithAuth({
+      spreadsheetId: params.spreadsheetId,
+      sheetTitle: params.sheetTitle,
+      columnIndex0: idx,
+      startRowIndex0: 1,
+      serviceAccountPath: params.serviceAccountPath
+    });
+  }
 }
 
 /**
@@ -231,6 +451,24 @@ function formatError(e: ParseError): string {
     if (typeof c?.stack === "string") parts.push(`causeStack=${c.stack.split("\n").slice(0, 5).join(" | ")}`);
   }
   return parts.join(" | ");
+}
+
+/**
+ * Stabilne sortowanie po datach:
+ * - operationDate asc,
+ * - valueDate asc,
+ * - dedupHash asc (stabilny tie-breaker).
+ */
+function sortByDatesAscending<T extends { operationDate: Date; valueDate: Date; dedupHash: string }>(
+  transactions: T[]
+): T[] {
+  return [...transactions].sort((a, b) => {
+    const od = a.operationDate.getTime() - b.operationDate.getTime();
+    if (od !== 0) return od;
+    const vd = a.valueDate.getTime() - b.valueDate.getTime();
+    if (vd !== 0) return vd;
+    return a.dedupHash.localeCompare(b.dedupHash);
+  });
 }
 
 main().catch((e) => {
