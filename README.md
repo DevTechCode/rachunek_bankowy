@@ -168,6 +168,14 @@ Komenda wgrywa dane z CSV (separator `;`) do Google Sheets.
 
 Wymagane: skoroszyt musi być udostępniony na `client_email` z `service-account.json` jako **Editor**.
 
+Uwaga: `service-account.json` jest **celowo ignorowany przez git** (sekret). Umieść go lokalnie obok `package.json`
+lub podaj ścieżkę parametrem `--service-account`.
+
+Szybki start:
+
+- skopiuj `service-account.example.json` → `service-account.json`
+- wklej wartości z klucza konta serwisowego (Google Cloud)
+
 ```bash
 node dist/cli.js gss:replace \
   --in "./out/parsed.csv" \
