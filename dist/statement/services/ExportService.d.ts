@@ -30,10 +30,10 @@ export declare class ExportService {
     /**
      * Wylicza kolumnę "Rodzaj" zgodnie z wymaganiem:
      * - "koszt" / "przychod" na bazie znaku kwoty
-     * - "Vat-" / "Vat+" jeśli wykryto kwotę VAT
+     * - "vat -" / "vat +" tylko gdy wykryto kwotę VAT ORAZ |kwota| == |VAT|
      *
      * @param amountMinor - kwota transakcji w minor units
-     * @param hasVat - czy jest kwota VAT
+     * @param vatAmountMinor - kwota VAT (minor) lub null/undefined jeśli brak
      */
     private rodzaj;
     /**

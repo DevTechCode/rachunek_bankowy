@@ -30,7 +30,7 @@ export declare class GoogleSheetsService {
     replaceSheetValues(params: {
         spreadsheetId: string;
         sheetTitle: string;
-        values: any[][];
+        values: string[][];
         serviceAccountPath: string;
     }): Promise<void>;
     /**
@@ -46,17 +46,7 @@ export declare class GoogleSheetsService {
     appendSheetValues(params: {
         spreadsheetId: string;
         sheetTitle: string;
-        values: any[][];
-        serviceAccountPath: string;
-    }): Promise<void>;
-    /**
-     * Wersja z jawnie podaną ścieżką service account (używana przez CLI).
-     */
-    setCheckboxColumnWithAuth(params: {
-        spreadsheetId: string;
-        sheetTitle: string;
-        columnIndex0: number;
-        startRowIndex0?: number;
+        values: string[][];
         serviceAccountPath: string;
     }): Promise<void>;
     /**

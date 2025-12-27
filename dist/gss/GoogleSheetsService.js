@@ -74,45 +74,6 @@ export class GoogleSheetsService {
         });
     }
     /**
-     * Wersja z jawnie podaną ścieżką service account (używana przez CLI).
-     */
-    async setCheckboxColumnWithAuth(params) {
-        const auth = await this.createAuth(params.serviceAccountPath);
-        const sheets = google.sheets({ version: "v4", auth });
-        const meta = await sheets.spreadsheets.get({ spreadsheetId: params.spreadsheetId, includeGridData: false });
-        const sheet = (meta.data.sheets ?? []).find((s) => s.properties?.title === params.sheetTitle);
-        const sheetId = sheet?.properties?.sheetId;
-        if (sheetId === undefined || sheetId === null)
-            return;
-        const startRow = params.startRowIndex0 ?? 1; // pomijamy header
-        const col = params.columnIndex0;
-        await sheets.spreadsheets.batchUpdate({
-            spreadsheetId: params.spreadsheetId,
-            requestBody: {
-                requests: [
-                    {
-                        repeatCell: {
-                            range: {
-                                sheetId,
-                                startRowIndex: startRow,
-                                startColumnIndex: col,
-                                endColumnIndex: col + 1
-                            },
-                            cell: {
-                                dataValidation: {
-                                    condition: { type: "BOOLEAN" },
-                                    strict: true,
-                                    showCustomUi: true
-                                }
-                            },
-                            fields: "dataValidation"
-                        }
-                    }
-                ]
-            }
-        });
-    }
-    /**
      * Tworzy JWT auth z pliku service-account.json.
      *
      * @param serviceAccountPath - ścieżka do JSON (zawiera client_email i private_key)
