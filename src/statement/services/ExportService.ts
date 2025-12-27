@@ -42,13 +42,17 @@ export class ExportService {
   /**
    * Wylicza kolumnę "Rodzaj" zgodnie z wymaganiem:
    * - "koszt" / "przychod" na bazie znaku kwoty
-   * - "Vat-" / "Vat+" jeśli wykryto kwotę VAT
+   * - "vat -" / "vat +" tylko gdy wykryto kwotę VAT ORAZ |kwota| == |VAT|
    *
    * @param amountMinor - kwota transakcji w minor units
-   * @param hasVat - czy jest kwota VAT
+   * @param vatAmountMinor - kwota VAT (minor) lub null/undefined jeśli brak
    */
-  private rodzaj(amountMinor: bigint, hasVat: boolean): string {
-    if (hasVat) return amountMinor < 0n ? "vat -" : "vat +";
+  private rodzaj(amountMinor: bigint, vatAmountMinor?: bigint | null): string {
+    const abs = (v: bigint): bigint => (v < 0n ? -v : v);
+    const hasVat = Boolean(vatAmountMinor && vatAmountMinor !== 0n);
+    const isVatOnly = hasVat && abs(amountMinor) === abs(vatAmountMinor!);
+
+    if (isVatOnly) return amountMinor < 0n ? "vat -" : "vat +";
     return amountMinor < 0n ? "koszt" : "przychód";
   }
 
@@ -116,7 +120,7 @@ export class ExportService {
       const row = [
         t.operationDate.toISOString().slice(0, 10),
         t.valueDate.toISOString().slice(0, 10),
-        this.csv(this.rodzaj(t.amount.minor, hasVat)),
+        this.csv(this.rodzaj(t.amount.minor, vatAmount?.minor)),
         this.csv(t.type),
         this.csv(t.category),
         this.csv(t.amount.toNumber().toFixed(t.amount.minorUnits)),
